@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <title>OfferShield — Check any job offer in seconds</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- PDF.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+
+  <!-- Tesseract.js -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.1/dist/tesseract.min.js"></script>
+
+  <!-- Small extra styles just for profile avatar, dropdown & extra tools -->
+  <style>
+    .profile-menu {
+      position: relative;
+      margin-left: 0.6rem;
+      display: flex;
+      align-items: center;
+    }
+
+    .profile-avatar-btn {
+      width: 2.2rem;
+      height: 2.2rem;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      background: radial-gradient(circle at 30% 0%, rgba(56, 189, 248, 0.25), transparent 55%),
+                  rgba(15, 23, 42, 0.95);
+      color: #e5e7eb;
+      font-weight: 600;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 0;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.7);
+      transition: transform 0.12s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+    }
+
+    .profile-avatar-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 32px rgba(15, 23, 42, 0.9);
+      border-color: rgba(56, 189, 248, 0.8);
+    }
+
+    .profile-dropdown {
+      position: absolute;
+      right: 0;
+      top: 125%;
+      min-width: 150px;
+      border-radius: 0.75rem;
+      background: rgba(15, 23, 42, 0.98);
+      border: 1px solid rgba(30, 64, 175, 0.8);
+      box-shadow: 0 18px 50px rgba(15, 23, 42, 0.9);
+      padding: 0.4rem;
+      z-index: 50;
+    }
+
+    .profile-dropdown-item {
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: #e5e7eb;
+      font-size: 0.85rem;
+      text-align: left;
+      padding: 0.45rem 0.6rem;
+      border-radius: 0.55rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .profile-dropdown-item:hover {
+      background: rgba(30, 64, 175, 0.6);
+    }
+
+    .profile-dropdown-item-icon {
+      font-size: 0.95rem;
+      opacity: 0.9;
+    }
+
+    /* Extra tools */
+    .feature-tool {
+      padding: 0.9rem 1rem;
+      border-radius: 1rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .feature-tool h3 {
+      font-size: 1rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .feature-tool p {
+      font-size: 0.85rem;
+      opacity: 0.85;
+      margin-bottom: 0.5rem;
+    }
+
+    .tool-output {
+      margin-top: 0.5rem;
+      font-size: 0.8rem;
+      max-height: 180px;
+      overflow: auto;
+      background: rgba(15,23,42,0.9);
+      border-radius: 0.75rem;
+      padding: 0.5rem 0.6rem;
+      border: 1px solid rgba(30,64,175,0.6);
+    }
+
+    #extra-features .glass-card.analysis-card {
+      border-image: linear-gradient(120deg, rgba(56,189,248,0.6), rgba(99,102,241,0.8)) 1;
+    }
+
+    /* Tiny glow anim for extra features */
+    .feature-tool::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at top left, rgba(56,189,248,0.15), transparent 55%);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .feature-tool:hover::before {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <!-- PRELOADER OVERLAY -->
+  <div id="preloader" class="preloader hidden">
+    <div class="hero-gradient preloader-bg"></div>
+    <div class="preloader-inner">
+      <div class="preloader-icon-wrap">
+        <div class="preloader-icon-pulse">
+          <!-- Simple SVG shield icon -->
+          <svg class="preloader-icon" viewBox="0 0 24 24" stroke="currentColor" fill="none">
+            <path d="M12 2l7 3v5c0 5-3 9-7 11-4-2-7-6-7-11V5l7-3z"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </div>
+      </div>
+
+      <div id="preloader-steps" class="preloader-steps">
+        <div class="preloader-step active">Reading your offer letter…</div>
+        <div class="preloader-step">Checking company & email authenticity…</div>
+        <div class="preloader-step">Scanning for scam language & links…</div>
+        <div class="preloader-step">Scoring final risk level…</div>
+      </div>
+
+      <div class="preloader-progress-bar">
+        <div id="preloader-progress" class="preloader-progress"></div>
+      </div>
+      <p id="preloader-percent" class="preloader-percent">0%</p>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- NAVBAR -->
+  <nav id="navbar" class="navbar">
+    <div class="container nav-inner">
+      <div class="nav-brand">
+        <div class="nav-logo-box">
+          <span class="nav-logo-text">OS</span>
+        </div>
+        <span class="nav-title gradient-text">OfferShield</span>
+      </div>
+
+      <div class="nav-links desktop-only">
+        <a href="#product" class="nav-link">Features</a>
+        <a href="#how-it-works" class="nav-link">How It Works</a>
+        <a href="#developers" class="nav-link">Tech</a>
+        <a href="#resources" class="nav-link">Resources</a>
+      </div>
+
+      <!-- Auth (desktop) -->
+      <div class="nav-ctas desktop-only">
+        <!-- Default: Log in button; hidden when logged in -->
+        <button id="login-link" class="btn btn-outline">Log in</button>
+
+        <!-- Profile avatar + dropdown; shown only when logged in -->
+        <div id="profile-menu" class="profile-menu hidden">
+          <button id="profile-button" class="profile-avatar-btn" aria-label="Account">
+            U
+          </button>
+          <div id="profile-dropdown" class="profile-dropdown hidden">
+            <button id="logout-button" class="profile-dropdown-item">
+              <span class="profile-dropdown-item-icon">⎋</span>
+              <span>Log out</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <button id="nav-toggle" class="nav-toggle mobile-only" aria-label="Toggle menu">
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+      </button>
+    </div>
+
+    <!-- Mobile menu -->
+    <div id="mobile-menu" class="mobile-menu hidden">
+      <a href="#product" class="mobile-link">Features</a>
+      <a href="#how-it-works" class="mobile-link">How It Works</a>
+      <a href="#developers" class="mobile-link">Tech</a>
+      <a href="#resources" class="mobile-link">Resources</a>
+
+      <button id="mobile-login-link" class="btn btn-primary glow-button w-full">
+        Log in
+      </button>
+    </div>
+  </nav>
+
+  <!-- HERO SECTION -->
+  <section class="hero" id="top">
+    <!-- Background layers -->
+    <div class="hero-gradient"></div>
+    <div class="hero-grid"></div>
+    <div class="hero-float hero-float-a"></div>
+    <div class="hero-float hero-float-b"></div>
+    <div class="hero-float hero-float-c"></div>
+    <div class="hero-float hero-float-d"></div>
+
+    <div class="container hero-content">
+      <div class="hero-inner">
+        <!-- Badge -->
+        <div class="hero-badge animate-fade-in">
+          <span class="badge-dot-wrap">
+            <span class="badge-dot-ping"></span>
+            <span class="badge-dot"></span>
+          </span>
+          <span class="badge-text">Stop fake job offers before they hit you</span>
+        </div>
+
+        <!-- Headline -->
+        <h1 class="hero-title animate-fade-in-up">
+          Is this job offer
+          <br />
+          <span class="gradient-text">safe or a scam?</span>
+        </h1>
+
+        <!-- Subheadline -->
+        <p class="hero-subtitle animate-fade-in-up delay-100">
+          OfferShield reads your offer letter (PDF, image, or email text), checks company authenticity,
+          salary realism, scam phrases, links, WhatsApp numbers, and more — then gives a clear
+          <strong>0–100 scam risk score</strong> with reasons.
+        </p>
+
+        <!-- Upload + Manual input -->
+        <div class="hero-input-wrap animate-fade-in-up delay-200">
+          <div class="glass-card hero-input-card">
+            <div class="hero-input-grid">
+              <!-- Upload column -->
+              <div class="hero-input-column">
+                <div class="hero-input-column-header">
+                  <h3 class="hero-input-title">Upload offer letter</h3>
+                  <p class="hero-input-subtitle">PDF or image, max ~10 MB</p>
+                </div>
+                <label for="file-input" class="upload-dropzone" id="upload-dropzone">
+                  <div class="upload-dropzone-inner">
+                    <div class="upload-icon-circle">
+                      <span>⬆</span>
+                    </div>
+                    <div class="upload-text-main">Drop file here or click to browse</div>
+                    <div class="upload-text-sub">Supported: PDF, PNG, JPG, JPEG</div>
+                    <div class="upload-filename" id="upload-filename">No file selected</div>
+                  </div>
+                </label>
+                <input
+                  id="file-input"
+                  type="file"
+                  accept="application/pdf,image/*"
+                  class="hidden"
+                />
+              </div>
+
+              <!-- Divider -->
+              <div class="hero-input-divider">
+                <span class="hero-input-divider-line"></span>
+                <span class="hero-input-divider-text">or</span>
+                <span class="hero-input-divider-line"></span>
+              </div>
+
+              <!-- Manual text column -->
+              <div class="hero-input-column">
+                <div class="hero-input-column-header">
+                  <h3 class="hero-input-title">Paste email / text</h3>
+                  <p class="hero-input-subtitle">
+                    Paste the full email, WhatsApp text, or copied letter.
+                  </p>
+                </div>
+                <textarea
+                  id="offer-text"
+                  class="textarea"
+                  rows="6"
+                  placeholder="Paste the job offer text here (subject, body, signature, phone numbers, links, etc.)"
+                ></textarea>
+              </div>
+            </div>
+
+            <div class="hero-input-actions">
+              <button id="analyze-button" class="btn btn-primary glow-button hero-setup-btn">
+                Scan Offer
+                <span class="btn-icon-arrow">➜</span>
+              </button>
+              <p class="hero-input-hint">
+                We never store your full offers. Use this before paying any money or sharing documents.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Social proof -->
+        <div class="hero-proof animate-fade-in delay-300">
+          <p class="hero-proof-label">Built by</p>
+          <div class="hero-proof-logos">
+            <span>Shashank Preetham .P</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-bottom-fade"></div>
+  </section>
+
+  <!-- HISTORY / REPORTED SCAMS SECTION -->
+  <section id="saved-envs-section" class="analysis-section hidden">
+    <div class="container">
+      <div class="glass-card analysis-card">
+        <h2 class="section-title">Community scam patterns</h2>
+        <p class="section-subtitle">
+          Recently reported scam offers (hashed). We never store raw text.
+        </p>
+        <div id="saved-envs-list">
+          <!-- Filled by JS -->
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ANALYSIS RESULT SECTION -->
+  <section id="analysis" class="analysis-section hidden">
+    <div class="container">
+      <div class="glass-card analysis-card">
+        <h2 class="section-title">Offer analysis ready</h2>
+        <p class="section-subtitle">
+          Here’s what OfferShield detected for this job offer.
+        </p>
+        <div id="analysis-content" class="analysis-content">
+          <!-- Filled by JS -->
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- EXTRA FEATURES SECTION -->
+  <section id="extra-features" class="analysis-section hidden">
+    <div class="container">
+      <div class="glass-card analysis-card">
+        <h2 class="section-title">Extra safety tools</h2>
+        <p class="section-subtitle">
+          Deep-dive tools to validate HR identity, watermarks, timelines and more.
+        </p>
+
+        <div class="analysis-extra-grid">
+          <!-- LinkedIn HR Verifier -->
+          <div class="glass-card feature-tool">
+            <h3>LinkedIn HR Identity Check</h3>
+            <p>Check if the HR name and company show up on LinkedIn search.</p>
+            <button id="btn-linkedin-check" class="btn btn-outline">Run Check</button>
+            <pre id="linkedin-result" class="tool-output"></pre>
+          </div>
+
+          <!-- Watermark Detector -->
+          <div class="glass-card feature-tool">
+            <h3>Watermark & Stamp Analysis</h3>
+            <p>Detect suspicious gradient watermarks or fake stamps in images.</p>
+            <button id="btn-watermark" class="btn btn-outline">Scan Image</button>
+            <pre id="watermark-result" class="tool-output"></pre>
+          </div>
+
+          <!-- Dangerous Keyword Detector -->
+          <div class="glass-card feature-tool">
+            <h3>Personal Data Danger Scan</h3>
+            <p>Look for Aadhaar, passport, bank info, UPI, fees and more.</p>
+            <button id="btn-danger-scan" class="btn btn-outline">Scan Text</button>
+            <pre id="danger-result" class="tool-output"></pre>
+          </div>
+
+          <!-- ScamFixer -->
+          <div class="glass-card feature-tool">
+            <h3>Rewrite into Real Offer (ScamFixer)</h3>
+            <p>See how a legitimate company would write this same offer.</p>
+            <button id="btn-scamfix" class="btn glow-button">Rewrite Offer</button>
+            <pre id="scamfix-result" class="tool-output"></pre>
+          </div>
+
+          <!-- Timeline Analyzer -->
+          <div class="glass-card feature-tool">
+            <h3>Offer Timeline Generator</h3>
+            <p>Extract dates and visualize the joining / probation timeline.</p>
+            <button id="btn-timeline" class="btn btn-outline">Generate Timeline</button>
+            <pre id="timeline-result" class="tool-output"></pre>
+          </div>
+
+          <!-- Domain Trust Score -->
+          <div class="glass-card feature-tool">
+            <h3>Email Domain Trust Score</h3>
+            <p>Check if the sender uses a free email domain or a real company domain.</p>
+            <button id="btn-domain-score" class="btn btn-outline">Check Domain</button>
+            <pre id="domain-result" class="tool-output"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURE SECTIONS -->
+  <main id="product" class="features-wrapper">
+    <section class="feature-section" data-animate="fade-up">
+      <div class="container feature-grid">
+        <div class="feature-text">
+          <div class="feature-icon-circle">
+            <!-- Shield icon -->
+            <svg viewBox="0 0 24 24" class="feature-icon">
+              <path d="M12 2l7 3v5c0 5-3 9-7 11-4-2-7-6-7-11V5l7-3z"
+                    fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </div>
+          <h2 class="feature-title">Scan any job offer instantly</h2>
+          <p class="feature-description">
+            Upload a PDF, image, or paste the email. OfferShield reads everything, from headers to small fine-print,
+            and breaks it down into a clean, visual risk report.
+          </p>
+          <ul class="feature-list">
+            <li>Company & domain authenticity checks</li>
+            <li>WhatsApp / Telegram / UPI / fee detection</li>
+            <li>Link and email sanity checks</li>
+            <li>Real-time scam pattern comparison</li>
+          </ul>
+        </div>
+        <div class="feature-visual">
+          <div class="glass-card feature-skeleton">
+            <div class="skeleton-line"></div>
+            <div class="skeleton-line delay-100"></div>
+            <div class="skeleton-line delay-200"></div>
+            <div class="skeleton-line delay-300"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="how-it-works" class="feature-section reverse" data-animate="fade-up">
+      <div class="container feature-grid">
+        <div class="feature-text">
+          <div class="feature-icon-circle">
+            <!-- Rocket icon -->
+            <svg viewBox="0 0 24 24" class="feature-icon">
+              <path d="M5 15l-1 4 4-1 9-9-3-3-9 9z" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round" />
+              <path d="M15 5l4-4" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </div>
+          <h2 class="feature-title">Multi-layer risk check in seconds</h2>
+          <p class="feature-description">
+            Behind one click, OfferShield runs layered checks: scam language, email domain, personal data requests,
+            timeline realism, and community reports.
+          </p>
+          <ul class="feature-list">
+            <li>Hybrid: rules + OpenAI for explanations</li>
+            <li>0–100 scam risk score with traffic-light label</li>
+            <li>Clear “why we flagged this” evidence list</li>
+            <li>One-click tools to investigate deeper</li>
+          </ul>
+        </div>
+        <div class="feature-visual">
+          <div class="glass-card feature-skeleton">
+            <div class="skeleton-line"></div>
+            <div class="skeleton-line delay-100"></div>
+            <div class="skeleton-line delay-200"></div>
+            <div class="skeleton-line delay-300"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="developers" class="feature-section" data-animate="fade-up">
+      <div class="container feature-grid">
+        <div class="feature-text">
+          <div class="feature-icon-circle">
+            <!-- CheckSquare icon -->
+            <svg viewBox="0 0 24 24" class="feature-icon">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"
+                fill="none" stroke="currentColor" stroke-width="2" />
+              <path d="M9 12l2 2 4-4" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </div>
+          <h2 class="feature-title">Developer-friendly & auditable</h2>
+          <p class="feature-description">
+            Built like a real product: clear logic, explainable scores, Firebase-backed reports,
+            and a frontend ready for static hosting.
+          </p>
+          <ul class="feature-list">
+            <li>Client-side OCR + PDF parsing</li>
+            <li>Simple JSON-like AI decisions</li>
+            <li>Firebase-based scam pattern aggregation</li>
+            <li>Clean separation of UI and analysis logic</li>
+          </ul>
+        </div>
+        <div class="feature-visual">
+          <div class="glass-card feature-skeleton">
+            <div class="skeleton-line"></div>
+            <div class="skeleton-line delay-100"></div>
+            <div class="skeleton-line delay-200"></div>
+            <div class="skeleton-line delay-300"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="resources" class="feature-section reverse" data-animate="fade-up">
+      <div class="container feature-grid">
+        <div class="feature-text">
+          <div class="feature-icon-circle">
+            <!-- ListChecks icon -->
+            <svg viewBox="0 0 24 24" class="feature-icon">
+              <path d="M9 6h11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <path d="M9 12h11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <path d="M9 18h11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <path d="M4 6l1.5 1.5L7 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M4 12l1.5 1.5L7 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M4 18l1.5 1.5L7 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <h2 class="feature-title">Your “Should I trust this?” checklist</h2>
+          <p class="feature-description">
+            Even if the model is unsure, OfferShield gives you a human-readable checklist to verify the offer
+            using official websites, LinkedIn, and direct HR channels.
+          </p>
+          <ul class="feature-list">
+            <li>What to ask HR before accepting</li>
+            <li>Red flags to screenshot & report</li>
+            <li>Simple explanation for friends & family</li>
+            <li>Community-sourced scam fingerprints</li>
+          </ul>
+        </div>
+        <div class="feature-visual">
+          <div class="glass-card feature-skeleton">
+            <div class="skeleton-line"></div>
+            <div class="skeleton-line delay-100"></div>
+            <div class="skeleton-line delay-200"></div>
+            <div class="skeleton-line delay-300"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- FAQ SECTION -->
+  <section class="faq-section">
+    <div class="container">
+      <div class="faq-header">
+        <h2 class="section-title">Frequently asked questions</h2>
+        <p class="section-subtitle">
+          Everything you need to know about OfferShield.
+        </p>
+      </div>
+
+      <div class="faq-accordion">
+        <div class="faq-item">
+          <button class="faq-question">
+            <span>What exactly does OfferShield check?</span>
+            <span class="faq-toggle">+</span>
+          </button>
+          <div class="faq-answer">
+            OfferShield looks at company authenticity, email domains, scam phrases, fee requests,
+            links, phone numbers, WhatsApp / Telegram mentions, salary realism, interview flow,
+            and structure of the letter. It then combines all of this into a 0–100 scam risk score
+            with a clear explanation.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question">
+            <span>Can I upload PDFs and screenshots?</span>
+            <span class="faq-toggle">+</span>
+          </button>
+          <div class="faq-answer">
+            Yes. You can upload offer letters as PDF or image (PNG/JPG). The app extracts text
+            using OCR and runs the same analysis pipeline as for plain email text.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question">
+            <span>Do you store my job offers?</span>
+            <span class="faq-toggle">+</span>
+          </button>
+          <div class="faq-answer">
+            The demo version only stores a hashed fingerprint when you explicitly click “Report as scam”.
+            Raw content is not stored in Firebase. Hash matches are used to warn future users if the same
+            letter was reported multiple times.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question">
+            <span>Is the decision fully automatic?</span>
+            <span class="faq-toggle">+</span>
+          </button>
+          <div class="faq-answer">
+            No. OfferShield is a decision-support tool. It highlights red flags and patterns and suggests
+            a likely verdict, but you should still cross-check using official career pages or by directly
+            contacting the company.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question">
+            <span>Can recruiters or universities use this?</span>
+            <span class="faq-toggle">+</span>
+          </button>
+          <div class="faq-answer">
+            Yes. Career centers, mentors, and student communities can use OfferShield to quickly triage
+            suspect offers before students pay any money or share sensitive information.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question">
+            <span>Does this use OpenAI?</span>
+            <span class="faq-toggle">+</span>
+          </button>
+          <div class="faq-answer">
+            Yes, the demo uses OpenAI client-side to summarize and explain risk, while rule-based checks handle
+            things like email domains, fees, links, and structure. In a production system, analysis would move
+            to a secure backend.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="container footer-grid">
+      <div class="footer-brand">
+        <div class="nav-logo-box">
+          <span class="nav-logo-text">OS</span>
+        </div>
+        <span class="nav-title gradient-text">OfferShield</span>
+        <p class="footer-text">
+          A safety layer between you and fake job offers.
+        </p>
+        <div class="footer-socials">
+          <a href="#" class="footer-social">X</a>
+          <a href="#" class="footer-social">GH</a>
+          <a href="#" class="footer-social">in</a>
+        </div>
+      </div>
+
+      <div class="footer-links">
+        <h4>Product</h4>
+        <a href="#product">Features</a>
+        <a href="#how-it-works">How it works</a>
+        <a href="#developers">Tech</a>
+      </div>
+
+      <div class="footer-links">
+        <h4>Company</h4>
+        <a href="#resources">About</a>
+        <a href="#resources">Blog</a>
+        <a href="#resources">Careers</a>
+      </div>
+
+      <div class="footer-links">
+        <h4>Resources</h4>
+        <a href="#resources">Community</a>
+        <a href="#resources">Contact</a>
+        <a href="#resources">Support</a>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>© 2025 OfferShield. All rights reserved.</p>
+      <div class="footer-bottom-links">
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+        <a href="#">Cookie Policy</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Firebase v8 (App + Auth + Realtime DB) -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <!-- Main app script -->
+  <script src="app.js"></script>
+</body>
+</html>
